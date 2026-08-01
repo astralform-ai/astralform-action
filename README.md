@@ -98,10 +98,20 @@ better here:
   `run:` block with `${{ }}` executes it on the runner. Every value here crosses into the script
   through the environment, which cannot be escaped out of.
 
-## Versioning
+## Versioning and pinning
 
-`@v1` is a moving major tag: it follows every backwards-compatible release. Pin `@v1.0.0` for an
-exact release, or a full commit SHA if your policy requires it.
+`@v1` is a **moving** major tag: it follows every backwards-compatible release. That convenience is
+also a trust decision — this action runs on your runner with `id-token: write`, so whoever can move
+`v1` can change what executes there. Three options, in increasing strictness:
+
+| Pin | What you get |
+|---|---|
+| `@v1` | Fixes and features arrive automatically. The tag moves. |
+| `@v1.0.1` | **Immutable.** A repository ruleset blocks deletion, update and force-push on every `v*.*.*` tag, so a released version can never be re-pointed. |
+| `@<full-sha>` | Immutable and independent of our tagging entirely. Dependabot and Renovate both keep SHA pins current. |
+
+If your organisation already pins `actions/checkout@<sha>`, pin this the same way — there is nothing
+special about it being first-party.
 
 ## License
 
