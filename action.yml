@@ -1,0 +1,189 @@
+name: Astralform Agent
+description: >-
+  Hand an issue or pull request to your Astralform agent. No secrets to
+  configure — the workflow proves which repository it is with a GitHub-signed
+  OIDC token.
+author: Astralform
+
+branding:
+  icon: cpu
+  color: orange
+
+inputs:
+  agent:
+    description: >-
+      Which agent answers. This is the agent's NAME as it appears in the
+      Astralform dashboard — dispatch resolves by name, scoped to the GitHub
+      account that owns this repository, so a name only resolves inside the
+      account it belongs to.
+    required: true
+
+  instruction:
+    description: >-
+      What to ask the agent. Defaults to the body of whatever triggered the
+      run — the comment, the issue, or the pull request. Set this only to
+      override that.
+    required: false
+    default: ''
+
+  issue-number:
+    description: >-
+      The issue or pull request the run is about. Defaults to whichever the
+      triggering event carries.
+    required: false
+    default: ''
+
+  api-url:
+    description: >-
+      Astralform API base URL. Only set this for a self-hosted deployment; the
+      OIDC audience must match it.
+    required: false
+    default: https://api.astralform.ai
+
+  audience:
+    description: >-
+      The audience to mint the OIDC token for. Must be the value the receiving
+      deployment pins, or it refuses the token. Change it only alongside
+      api-url.
+    required: false
+    default: https://api.astralform.ai
+
+outputs:
+  status:
+    description: Dispatch result reported by Astralform.
+    value: ${{ steps.dispatch.outputs.status }}
+  agent:
+    description: The agent that picked the run up.
+    value: ${{ steps.dispatch.outputs.agent }}
+  repository:
+    description: The repository Astralform resolved from the OIDC token.
+    value: ${{ steps.dispatch.outputs.repository }}
+  issue-number:
+    description: The issue or pull request the run is about.
+    value: ${{ steps.dispatch.outputs.issue-number }}
+
+runs:
+  using: composite
+  steps:
+    - id: dispatch
+      uses: actions/github-script@v7
+      env:
+        # Every one of these is passed through the environment rather than
+        # interpolated into the script body. `instruction` is attacker-controlled
+        # text — anyone who can open an issue writes it — and a `${{ }}` splice
+        # of it into JavaScript is a script injection on the runner. Reading it
+        # from process.env is the only form that cannot be escaped out of.
+        ASTRALFORM_AGENT: ${{ inputs.agent }}
+        ASTRALFORM_INSTRUCTION: ${{ inputs.instruction }}
+        ASTRALFORM_ISSUE_NUMBER: ${{ inputs.issue-number }}
+        ASTRALFORM_API_URL: ${{ inputs.api-url }}
+        ASTRALFORM_AUDIENCE: ${{ inputs.audience }}
+      with:
+        script: |
+          const {
+            ASTRALFORM_AGENT: agent,
+            ASTRALFORM_API_URL: apiUrl,
+            ASTRALFORM_AUDIENCE: audience,
+          } = process.env;
+
+          const payload = context.payload;
+
+          // The comment first, then the issue, then the pull request — the same
+          // order the event types are registered in. A comment event also
+          // carries the issue it is on, so checking the issue first would
+          // answer the wrong text on every reply.
+          const fromEvent = (...paths) => {
+            for (const pick of paths) {
+              const value = pick();
+              if (value !== undefined && value !== null && value !== '') return value;
+            }
+            return undefined;
+          };
+
+          const instruction =
+            process.env.ASTRALFORM_INSTRUCTION ||
+            fromEvent(
+              () => payload.comment?.body,
+              () => payload.issue?.body,
+              () => payload.pull_request?.body,
+            ) ||
+            '';
+
+          const issueNumber = Number(
+            process.env.ASTRALFORM_ISSUE_NUMBER ||
+              fromEvent(
+                () => payload.issue?.number,
+                () => payload.pull_request?.number,
+              ) ||
+              0,
+          );
+
+          // Who asked. The OIDC token proves which REPOSITORY is calling and
+          // says nothing about the person, so Astralform gates on this — only
+          // an OWNER, MEMBER or COLLABORATOR may start a run. It is reported,
+          // never asserted: the server re-checks it against the repository.
+          const authorAssociation =
+            fromEvent(
+              () => payload.comment?.author_association,
+              () => payload.issue?.author_association,
+              () => payload.pull_request?.author_association,
+            ) || '';
+
+          if (!agent) {
+            core.setFailed('The `agent` input is required.');
+            return;
+          }
+
+          // Needs `permissions: id-token: write` on the calling job. Without it
+          // this throws, and the message below is the one thing that makes that
+          // diagnosable — the raw error names an unset environment variable.
+          let token;
+          try {
+            token = await core.getIDToken(audience);
+          } catch (error) {
+            core.setFailed(
+              'Could not mint an OIDC token. Add `permissions: { id-token: write }` ' +
+                `to this job. (${error.message})`,
+            );
+            return;
+          }
+
+          const endpoint = `${apiUrl.replace(/\/+$/, '')}/v1/github/dispatch`;
+          core.info(`Dispatching to ${agent} (${context.repo.owner}/${context.repo.repo}#${issueNumber})`);
+
+          const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              agent,
+              issue_number: issueNumber || null,
+              instruction,
+              author_association: authorAssociation,
+            }),
+          });
+
+          const raw = await response.text();
+          let body;
+          try {
+            body = JSON.parse(raw);
+          } catch {
+            body = null;
+          }
+
+          if (!response.ok) {
+            // FastAPI puts the reason in `detail`. Surfacing it is the whole
+            // difference between "the agent did not answer" and "that agent
+            // name does not resolve in this account".
+            const detail = body?.detail ?? raw ?? '';
+            core.setFailed(`Astralform refused the dispatch (${response.status}): ${detail}`);
+            return;
+          }
+
+          core.setOutput('status', body?.status ?? 'ok');
+          core.setOutput('agent', body?.agent ?? agent);
+          core.setOutput('repository', body?.repository ?? `${context.repo.owner}/${context.repo.repo}`);
+          core.setOutput('issue-number', body?.issue_number ?? issueNumber);
+          core.info(`Astralform accepted the run: ${body?.status ?? 'ok'}`);

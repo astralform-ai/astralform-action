@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: action.yml is valid YAML and declares what it must
+        run: |
+          python3 - <<'PY'
+          import sys, yaml
+
+          spec = yaml.safe_load(open("action.yml"))
+
+          assert spec["runs"]["using"] == "composite", "must stay a composite action"
+          assert "agent" in spec["inputs"], "the agent input is the whole contract"
+          assert spec["inputs"]["agent"]["required"] is True
+
+          for name in ("status", "agent", "repository", "issue-number"):
+              assert name in spec["outputs"], f"missing output: {name}"
+
+          # Every value the action passes into JavaScript must cross through the
+          # environment. An issue body spliced in with ${{ }} executes on the
+          # runner, and this repository exists partly to stop people hand-rolling
+          # that. Assert the shape rather than trusting review to catch it.
+          step = spec["runs"]["steps"][0]
+          script = step["with"]["script"]
+          assert "${{" not in script, "no expression may be interpolated into the script body"
+          for var in (
+              "ASTRALFORM_AGENT",
+              "ASTRALFORM_INSTRUCTION",
+              "ASTRALFORM_ISSUE_NUMBER",
+              "ASTRALFORM_API_URL",
+              "ASTRALFORM_AUDIENCE",
+          ):
+              assert var in step["env"], f"{var} must be passed via env"
+
+          print("action.yml ok")
+          PY
+
+      - name: The example in the README is valid workflow YAML
+        run: |
+          python3 - <<'PY'
+          import re, yaml
+
+          readme = open("README.md").read()
+          blocks = re.findall(r"```yaml\n(.*?)```", readme, re.S)
+          assert blocks, "the README must carry a copyable workflow"
+
+          workflow = yaml.safe_load(blocks[0])
+          job = workflow["jobs"]["astralform"]
+
+          # `on` parses as the boolean True in YAML 1.1 — hence the lookup below.
+          assert workflow.get("on") or workflow.get(True), "the example needs triggers"
+          assert job["permissions"]["id-token"] == "write", (
+              "without id-token: write the OIDC mint fails, so the example must show it"
+          )
+          uses = [s["uses"] for s in job["steps"] if "uses" in s]
+          assert any(u.startswith("astralform-ai/astralform-action@") for u in uses)
+
+          print("README example ok")
+          PY
