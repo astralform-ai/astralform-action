@@ -29,12 +29,17 @@ jobs:
               assert name in spec["outputs"], f"missing output: {name}"
 
           # Every value the action passes into JavaScript must cross through the
-          # environment. An issue body spliced in with ${{ }} executes on the
-          # runner, and this repository exists partly to stop people hand-rolling
-          # that. Assert the shape rather than trusting review to catch it.
+          # environment. An issue body spliced in as an expression executes on
+          # the runner, and this repository exists partly to stop people
+          # hand-rolling that. Assert the shape rather than trusting review.
+          #
+          # The marker is built rather than written: a literal one in this file
+          # is an unterminated expression to GitHub's own workflow parser, which
+          # fails the run before a single job is created.
+          marker = "$" + "{{"
           step = spec["runs"]["steps"][0]
           script = step["with"]["script"]
-          assert "${{" not in script, "no expression may be interpolated into the script body"
+          assert marker not in script, "no expression may be interpolated into the script body"
           for var in (
               "ASTRALFORM_AGENT",
               "ASTRALFORM_INSTRUCTION",
