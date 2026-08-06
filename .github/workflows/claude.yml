@@ -1,0 +1,30 @@
+name: Claude
+
+# On-demand counterpart to claude-review.yml: lets a human summon a review or
+# a fix with an `@claude` mention. Also the recovery path when the automatic
+# reviewer does not fire.
+#
+# NOTE: `issue_comment` workflows are read from the DEFAULT BRANCH, not the PR
+# branch — so this file has no effect until it is merged to main.
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  issues:
+    types: [opened, assigned]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+  actions: read
+
+jobs:
+  claude:
+    uses: astralform-ai/.github/.github/workflows/claude.yml@main
+    secrets: inherit

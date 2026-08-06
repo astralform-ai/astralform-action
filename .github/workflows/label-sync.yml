@@ -1,0 +1,24 @@
+name: Sync labels
+
+# Reconciles this repo's labels to match .github/labels.yml.
+# No PAT — uses the default GITHUB_TOKEN (scoped to this repo).
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/labels.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read    # required for actions/checkout on private repos
+  issues: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: EndBug/label-sync@v2
+        with:
+          config-file: .github/labels.yml
+          delete-other-labels: true
