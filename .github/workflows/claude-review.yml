@@ -2,15 +2,6 @@ name: PR Review
 
 on:
   pull_request:
-    # `synchronize` is load-bearing and its absence is silent. With `opened`
-    # alone the reviewer sees a PR exactly once — the commit it was opened
-    # with — and every push after that ships unreviewed. Worse: the
-    # `review / review` check belongs to the commit it ran on, so after a push
-    # it is not stale-green but ABSENT, while `mergeStateStatus` still reports
-    # CLEAN, because a check that never ran blocks nothing.
-    #
-    # `reopened` is a distinct activity type from `opened`, so close/reopen was
-    # never a workaround either.
     types: [opened, synchronize, reopened]
 
 permissions:
@@ -18,20 +9,9 @@ permissions:
   pull-requests: write
   id-token: write
   actions: read
-  # Required, not optional: a reusable workflow's permissions are INTERSECTED
-  # with the caller's, and requesting a scope the caller lacks is a startup
-  # failure — the run reports `startup_failure` with zero jobs and no log.
-  # The called workflow requests `packages: read` for the JS gate, so every
-  # caller must grant it too.
   packages: read
 
 jobs:
   review:
-    # NO `runner:` input — deliberate, and load-bearing for a PUBLIC repo.
-    # The called workflow lets the reviewer run a PR's package.json scripts.
-    # That is only safe because public callers omit this input and land on the
-    # ephemeral `ubuntu-latest` default instead of the org's persistent
-    # self-hosted pool. Adding `runner: self-hosted` here would turn this into
-    # fork-PR code execution on a shared host. Do not add it.
     uses: astralform-ai/.github/.github/workflows/claude-review.yml@main
     secrets: inherit

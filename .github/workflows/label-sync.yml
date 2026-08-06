@@ -1,8 +1,5 @@
 name: Sync labels
 
-# Reconciles this repo's labels to match .github/labels.yml.
-# No PAT — uses the default GITHUB_TOKEN (scoped to this repo).
-
 on:
   push:
     branches: [main]
@@ -10,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read    # required for actions/checkout on private repos
+  contents: read
   issues: write
 
 jobs:
