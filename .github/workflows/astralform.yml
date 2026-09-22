@@ -1,0 +1,21 @@
+name: Astralform
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  astralform:
+    # No `if:` guard, on purpose. This repository is opted in to automatic
+    # review in the Astralform dashboard, and that opt-in — not a mention, and
+    # not the sender being human — is what authorises the run. The agent pushes
+    # branches here, so a bot sender must not be filtered out.
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: astralform-ai/astralform-action@v1
+        with:
+          agent: "pr-reviewer"
+          mode: review
