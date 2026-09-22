@@ -45,11 +45,47 @@ jobs:
 `agent` is the agent's **name** as it appears in the dashboard. The dashboard's connector page
 generates this file with the name already filled in — copy it from there.
 
+### Reviewing pull requests
+
+To have the agent review pull requests instead of answering mentions, opt the repository in on the
+agent's **Connectors** page in the dashboard first. Then add this as
+`.github/workflows/astralform-review.yml`. There is **no** mention `if:` gate: nothing has to be
+mentioned for a pull request to be reviewed.
+
+```yaml
+name: Astralform review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  astralform:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: astralform-ai/astralform-action@v1
+        with:
+          agent: your-agent-name
+          mode: review
+```
+
+The opt-in in the dashboard is what authorises the review, not the workflow. A `mode: review` call
+from a repository that has not opted in is refused server-side, so copying this file in is not
+enough on its own.
+
+**Forks cannot start a review run.** GitHub withholds `id-token: write` from fork-originated
+`pull_request` runs, so the OIDC mint fails and the action says so before anything is sent. Review
+runs are for same-repo branches only.
+
 ## Inputs
 
 | Input | Required | Default | What it does |
 |---|---|---|---|
 | `agent` | yes | — | Which agent answers. Resolved by name, scoped to the GitHub account that owns this repository. |
+| `mode` | no | `mention` | What kind of run to start. `mention` answers what asked for it; `review` starts a review run on a pull request, which the repository must have opted into in the dashboard. |
 | `instruction` | no | the triggering body | What to ask. Defaults to the comment, issue, or pull request body that fired the event. |
 | `issue-number` | no | the triggering number | The issue or PR the run is about. |
 | `api-url` | no | `https://api.astralform.ai` | Only for a self-hosted deployment. |

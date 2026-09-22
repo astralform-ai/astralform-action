@@ -18,6 +18,14 @@ inputs:
       account it belongs to.
     required: true
 
+  mode:
+    description: >-
+      What kind of run to start. `mention` answers what asked for it; `review`
+      starts a review run on a pull request, which the repository must have
+      opted into in the Astralform dashboard.
+    required: false
+    default: 'mention'
+
   instruction:
     description: >-
       What to ask the agent. Defaults to the body of whatever triggered the
@@ -74,6 +82,7 @@ runs:
         # of it into JavaScript is a script injection on the runner. Reading it
         # from process.env is the only form that cannot be escaped out of.
         ASTRALFORM_AGENT: ${{ inputs.agent }}
+        ASTRALFORM_MODE: ${{ inputs.mode }}
         ASTRALFORM_INSTRUCTION: ${{ inputs.instruction }}
         ASTRALFORM_ISSUE_NUMBER: ${{ inputs.issue-number }}
         ASTRALFORM_API_URL: ${{ inputs.api-url }}
@@ -85,6 +94,11 @@ runs:
             ASTRALFORM_API_URL: apiUrl,
             ASTRALFORM_AUDIENCE: audience,
           } = process.env;
+
+          // The manifest defaults this to mention, so a caller that never sets
+          // it dispatches exactly what it did before. An explicit empty string
+          // still arrives empty, which is why the fallback is repeated here.
+          const mode = process.env.ASTRALFORM_MODE || 'mention';
 
           const payload = context.payload;
 
@@ -134,6 +148,17 @@ runs:
             return;
           }
 
+          // Refused here rather than forwarded for the server to interpret: a
+          // typo in a workflow should name the accepted values on the runner,
+          // not come back as an opaque refusal of an otherwise valid dispatch.
+          const modes = ['mention', 'review'];
+          if (!modes.includes(mode)) {
+            core.setFailed(
+              `The \`mode\` input must be one of ${modes.join(' or ')}. Got \`${mode}\`.`,
+            );
+            return;
+          }
+
           // Needs `permissions: id-token: write` on the calling job. Without it
           // this throws, and the message below is the one thing that makes that
           // diagnosable — the raw error names an unset environment variable.
@@ -162,6 +187,7 @@ runs:
               issue_number: issueNumber || null,
               instruction,
               author_association: authorAssociation,
+              mode,
             }),
           });
 

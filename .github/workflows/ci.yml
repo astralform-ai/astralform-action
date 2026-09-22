@@ -46,8 +46,23 @@ jobs:
               "ASTRALFORM_ISSUE_NUMBER",
               "ASTRALFORM_API_URL",
               "ASTRALFORM_AUDIENCE",
+              "ASTRALFORM_MODE",
           ):
               assert var in step["env"], f"{var} must be passed via env"
+
+          # `mode` decides what the server does before it reads anything else, so
+          # pin all three edges of it: the manifest default keeps a caller that
+          # never sets it on a mention run, the script reads it from the
+          # environment, and the payload carries it. The file is the whole
+          # program, so the script is asserted by shape rather than executed.
+          mode = spec["inputs"]["mode"]
+          assert mode["required"] is False, "mode must stay optional"
+          assert mode["default"] == "mention", "an unset mode must stay a mention run"
+          assert "process.env.ASTRALFORM_MODE" in script, "mode must be read from the environment"
+
+          assert "JSON.stringify({" in script, "the dispatch must post a JSON payload"
+          payload = script.split("JSON.stringify({", 1)[1].split("})", 1)[0]
+          assert "mode" in payload, "the dispatch payload must carry mode"
 
           print("action.yml ok")
           PY
