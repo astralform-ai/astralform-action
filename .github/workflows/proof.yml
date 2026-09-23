@@ -12,8 +12,8 @@ jobs:
       - uses: astralform-ai/astralform-action@v1
         with:
           agent: "pr-reviewer"
-          mode: mention
+          mode: review
           instruction: >-
-            @astralform Use the subagent tool exactly once. Give it this prompt:
-            "Reply with exactly the word BANANA and nothing else." Then answer with
-            one line: the word the subagent returned.
+            Before you do anything else, you MUST use the subagent tool exactly once.
+            Give the subagent this prompt: "Reply with exactly the word BANANA and nothing
+            else." Then begin your answer with the line: SUBAGENT SAID: <the word it returned>
