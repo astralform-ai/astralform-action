@@ -67,6 +67,21 @@ jobs:
           print("action.yml ok")
           PY
 
+      - name: A throttle is retried, a refusal is not
+        run: |
+          # The action is one inline script; the only way to test a POLICY like
+          # "retry 429, honour Retry-After, never retry 403" is to run that text.
+          # A shape assertion cannot catch an off-by-one in the attempt count or
+          # a backoff that never waits — the two ways a retry loop silently stops
+          # retrying, which is the failure this feature exists to prevent.
+          python3 - "$RUNNER_TEMP/dispatch-script.js" <<'PY'
+          import sys, yaml
+          spec = yaml.safe_load(open("action.yml"))
+          with open(sys.argv[1], "w") as handle:
+              handle.write(spec["runs"]["steps"][0]["with"]["script"])
+          PY
+          node scripts/check-dispatch.mjs "$RUNNER_TEMP/dispatch-script.js"
+
       - name: The example in the README is valid workflow YAML
         run: |
           python3 - <<'PY'

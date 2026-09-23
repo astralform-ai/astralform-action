@@ -176,20 +176,85 @@ runs:
           const endpoint = `${apiUrl.replace(/\/+$/, '')}/v1/github/dispatch`;
           core.info(`Dispatching to ${agent} (${context.repo.owner}/${context.repo.repo}#${issueNumber})`);
 
-          const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              agent,
-              issue_number: issueNumber || null,
-              instruction,
-              author_association: authorAssociation,
-              mode,
-            }),
+          // ONE DISPATCH, RETRIED. A burst is a supported way to use this action —
+          // 20 pull requests opened at once dispatch 20 reviews — and the server
+          // throttles per repository with a 429 and a `Retry-After`. Without a
+          // retry here, that throttle is a red CI run in seconds: the exact
+          // "astralform (pull_request) Failing after 5s" a fan-out produced, where
+          // nothing was wrong except that the platform was busy.
+          //
+          // Only statuses that mean "try again" are retried. A 401/403/404/422 is a
+          // configuration answer and is reported immediately — retrying it would
+          // just delay the explanation.
+          const RETRYABLE_STATUSES = new Set([429, 502, 503, 504]);
+          const MAX_ATTEMPTS = 4;
+          const MAX_WAIT_MS = 30000;
+
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+          // `Retry-After` is the server telling us WHEN, which beats any backoff we
+          // could invent. It is documented as seconds or an HTTP date; only the
+          // seconds form is used, and an unreadable header falls back to jittered
+          // exponential backoff. Capped: a workflow must not sit for an hour.
+          const waitBeforeRetry = (response, attempt) => {
+            const headerSeconds = Number(response.headers.get('retry-after'));
+            if (Number.isFinite(headerSeconds) && headerSeconds > 0) {
+              return Math.min(headerSeconds * 1000, MAX_WAIT_MS);
+            }
+            const base = Math.min(500 * 2 ** (attempt - 1), 8000);
+            // Jittered, so a fleet of workflows throttled by ONE burst does not
+            // retry in lockstep and re-create the burst.
+            return Math.min(base * (0.5 + Math.random() * 0.5), MAX_WAIT_MS);
+          };
+
+          // Not `payload` — that name is already the event payload above.
+          const requestBody = JSON.stringify({
+            agent,
+            issue_number: issueNumber || null,
+            instruction,
+            author_association: authorAssociation,
+            mode,
           });
+
+          let response;
+          for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+            try {
+              response = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                  'Content-Type': 'application/json',
+                },
+                body: requestBody,
+              });
+            } catch (error) {
+              // A network failure is retryable for the same reason a 5xx is, and
+              // is the one failure with no status to report.
+              if (attempt === MAX_ATTEMPTS) {
+                core.setFailed(
+                  `Could not reach Astralform at ${endpoint} after ${MAX_ATTEMPTS} attempts: ` +
+                    `${error.message}`,
+                );
+                return;
+              }
+              core.warning(
+                `Attempt ${attempt}/${MAX_ATTEMPTS} could not reach Astralform ` +
+                  `(${error.message}); retrying.`,
+              );
+              await sleep(Math.min(500 * 2 ** (attempt - 1), 8000));
+              continue;
+            }
+
+            if (!RETRYABLE_STATUSES.has(response.status) || attempt === MAX_ATTEMPTS) {
+              break;
+            }
+            const waitMs = waitBeforeRetry(response, attempt);
+            core.warning(
+              `Astralform answered ${response.status} (attempt ${attempt}/${MAX_ATTEMPTS}); ` +
+                `retrying in ${Math.round(waitMs / 1000)}s.`,
+            );
+            await sleep(waitMs);
+          }
 
           const raw = await response.text();
           let body;
@@ -204,7 +269,15 @@ runs:
             // difference between "the agent did not answer" and "that agent
             // name does not resolve in this account".
             const detail = body?.detail ?? raw ?? '';
-            core.setFailed(`Astralform refused the dispatch (${response.status}): ${detail}`);
+            // A retryable status that survived every attempt is a different
+            // sentence from one that was refused outright: the first is "still
+            // busy", the second is "this will not work".
+            const tried = RETRYABLE_STATUSES.has(response.status)
+              ? ` after ${MAX_ATTEMPTS} attempts`
+              : '';
+            core.setFailed(
+              `Astralform refused the dispatch (${response.status}${tried}): ${detail}`,
+            );
             return;
           }
 

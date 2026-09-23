@@ -76,6 +76,23 @@ The opt-in in the dashboard is what authorises the review, not the workflow. A `
 from a repository that has not opted in is refused server-side, so copying this file in is not
 enough on its own.
 
+### Throttling, retries and CI
+
+Astralform limits how many runs one repository can start in a short window, so a
+burst — 20 pull requests opened at once, 20 reviews — cannot be turned into an
+unbounded number of billable jobs. A dispatch over that limit is answered with
+`429` and a `Retry-After`, and **this action retries it**: up to 4 attempts, waiting
+what the server asked for (capped at 30s), then jittered exponential backoff if the
+server gave no timing. A `502`/`503`/`504`, and a network failure, are retried the
+same way.
+
+A refusal that is not a throttle — `400`, `401`, `403`, `404`, `422` — is reported
+immediately. Retrying those would only delay the explanation, and the message on
+the runner names the reason the server gave.
+
+Nothing here needs a `retry` step around it, and wrapping the action in one would
+retry a run that already started.
+
 **Forks cannot start a review run.** GitHub withholds `id-token: write` from fork-originated
 `pull_request` runs, so the OIDC mint fails and the action says so before anything is sent. Review
 runs are for same-repo branches only.
