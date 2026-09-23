@@ -1,0 +1,19 @@
+name: Proof — subagent UI nesting
+
+on: pull_request
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: astralform-ai/astralform-action@v1
+        with:
+          agent: "pr-reviewer"
+          mode: review
+          instruction: >-
+            Before you do anything else, you MUST use the subagent tool exactly once.
+            Give the subagent this prompt: "Reply with exactly the word BANANA and nothing
+            else." Then begin your answer with the line: SUBAGENT SAID: <the word it returned>
