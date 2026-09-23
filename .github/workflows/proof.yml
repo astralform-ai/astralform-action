@@ -1,0 +1,19 @@
+name: Proof — subagent delegation
+
+on: pull_request
+
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: astralform-ai/astralform-action@v1
+        with:
+          agent: "pr-reviewer"
+          mode: mention
+          instruction: >-
+            @astralform Use the subagent tool exactly once. Give it this prompt:
+            "Reply with exactly the word BANANA and nothing else." Then answer with
+            one line: the word the subagent returned.
