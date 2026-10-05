@@ -1,1 +1,1 @@
-burst re-run marker: branch 16 of 20 (2026-10-04, capacity-wait live)
+burst re-run marker: round-3 16 (2026-10-04, capacity-wait live)
