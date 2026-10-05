@@ -1,0 +1,1 @@
+burst re-run burst20/13 — see docs/architecture/fanout-capacity.md
