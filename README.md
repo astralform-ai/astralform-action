@@ -169,3 +169,5 @@ special about it being first-party.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+<!-- ocr review probe two 2026-11-17 -->
