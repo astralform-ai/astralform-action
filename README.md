@@ -169,3 +169,5 @@ special about it being first-party.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+<!-- pr-agent review probe 2026-11-17 -->
