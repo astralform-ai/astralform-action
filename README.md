@@ -171,3 +171,5 @@ special about it being first-party.
 MIT — see [LICENSE](LICENSE).
 
 <!-- pr-agent pr.2 clean review 2026-11-21T22:03:44Z -->
+
+<!-- pr-agent pr.2 fresh worker 2026-11-21T22:07:53Z -->
