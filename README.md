@@ -171,3 +171,5 @@ special about it being first-party.
 MIT — see [LICENSE](LICENSE).
 
 <!-- pr-reviewer smoke: 2026-11-21T21:27:45Z -->
+
+<!-- retry after removing host skill grant 2026-11-21T21:31:43Z -->
