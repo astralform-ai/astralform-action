@@ -169,3 +169,5 @@ special about it being first-party.
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+<!-- pr-reviewer smoke: 2026-11-21T21:27:45Z -->
